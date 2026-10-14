@@ -29,9 +29,9 @@ export const VinylTurntable: React.FC<VinylTurntableProps> = ({
   };
 
   return (
-    <div className="relative flex flex-col items-center justify-center p-4 md:p-6 select-none">
+    <div className="relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-6 select-none max-h-full">
       {/* Turntable Plinth / Body */}
-      <div className="relative w-72 h-72 sm:w-80 sm:h-80 md:w-96 md:h-96 rounded-3xl bg-gradient-to-br from-zinc-900 via-neutral-900 to-black p-4 md:p-6 shadow-2xl border border-white/10 overflow-hidden flex items-center justify-center">
+      <div className="relative w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 max-w-[84vw] max-h-[84vw] rounded-3xl bg-gradient-to-br from-zinc-900 via-neutral-900 to-black p-3 sm:p-4 md:p-6 shadow-2xl border border-white/10 overflow-hidden flex items-center justify-center">
         {/* Subtle Brushed Metal Finish */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.05),transparent_70%)] pointer-events-none" />
 

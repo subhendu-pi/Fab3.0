@@ -1,7 +1,7 @@
 import React from 'react';
-import { Song } from '../../types/music';
+import { PlaybackRepeat, Song } from '../../types/music';
 import { CoverArt } from '../common/CoverArt';
-import { Play, Pause, SkipForward, Heart, Disc, AlignLeft, Maximize2 } from 'lucide-react';
+import { Play, Pause, SkipForward, Heart, Disc, Maximize2, Repeat, Repeat1, Infinity, Shuffle } from 'lucide-react';
 
 interface MiniPlayerProps {
   song: Song;
@@ -15,6 +15,12 @@ interface MiniPlayerProps {
   onOpenFullPlayer: () => void;
   onOpenLyrics?: () => void;
   onOpenTurntable?: () => void;
+  repeatMode?: PlaybackRepeat;
+  onToggleRepeat?: () => void;
+  isShuffle?: boolean;
+  onToggleShuffle?: () => void;
+  isInfinity?: boolean;
+  onToggleInfinity?: () => void;
 }
 
 export const MiniPlayer: React.FC<MiniPlayerProps> = ({
@@ -27,13 +33,27 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
   onNext,
   onToggleLike,
   onOpenFullPlayer,
+  repeatMode = 'all',
+  onToggleRepeat,
+  isShuffle = false,
+  onToggleShuffle,
+  isInfinity = true,
+  onToggleInfinity,
 }) => {
+  const triggerHaptic = () => {
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate?.(10);
+      } catch {}
+    }
+  };
+
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <aside
       aria-label="Audio Player"
-      className="fixed bottom-0 inset-x-0 z-40 bg-zinc-900/90 dark:bg-black/95 backdrop-blur-xl border-t border-white/10 shadow-2xl transition-all select-none"
+      className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] md:bottom-0 inset-x-0 z-30 bg-zinc-900/95 dark:bg-black/95 backdrop-blur-xl border-t border-white/10 shadow-2xl transition-all select-none"
     >
       {/* Top Border Progress Scrubber Bar */}
       <div className="relative w-full h-1 bg-white/10 overflow-hidden">
@@ -90,6 +110,57 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
             />
           </button>
 
+          {/* Shuffle Toggle Button */}
+          {onToggleShuffle && (
+            <button
+              onClick={onToggleShuffle}
+              className={`p-2 rounded-full transition-colors hidden sm:flex items-center justify-center ${
+                isShuffle
+                  ? 'text-indigo-400 bg-white/10'
+                  : 'text-zinc-500 hover:text-white'
+              }`}
+              title={`Shuffle: ${isShuffle ? 'ON' : 'OFF'}`}
+            >
+              <Shuffle className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+          )}
+
+          {/* 3-Tap Repeat / Loop Button */}
+          {onToggleRepeat && (
+            <button
+              onClick={onToggleRepeat}
+              className={`p-2 rounded-full transition-colors hidden sm:flex items-center justify-center ${
+                repeatMode !== 'off'
+                  ? 'text-indigo-400 bg-white/10'
+                  : 'text-zinc-500 hover:text-white'
+              }`}
+              title={`Loop Mode (Tap to cycle): ${
+                repeatMode === 'one' ? 'Loop Once' : repeatMode === 'all' ? 'Loop All' : 'Loop Off'
+              }`}
+            >
+              {repeatMode === 'one' ? (
+                <Repeat1 className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" />
+              ) : (
+                <Repeat className={`w-4 h-4 sm:w-5 sm:h-5 ${repeatMode === 'all' ? 'text-indigo-400' : ''}`} />
+              )}
+            </button>
+          )}
+
+          {/* Infinity Autoplay Button */}
+          {onToggleInfinity && (
+            <button
+              onClick={onToggleInfinity}
+              className={`p-2 rounded-full transition-colors hidden sm:flex items-center justify-center ${
+                isInfinity
+                  ? 'text-indigo-400 bg-white/10 shadow-[0_0_10px_rgba(129,140,248,0.25)]'
+                  : 'text-zinc-500 hover:text-white'
+              }`}
+              title={`Infinity Autoplay: ${isInfinity ? 'ON (Endless Radio Recommendations)' : 'OFF'}`}
+            >
+              <Infinity className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+          )}
+
           {/* Quick Turntable Mode Button */}
           <button
             onClick={onOpenFullPlayer}
@@ -101,7 +172,10 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
 
           {/* Play / Pause Toggle Button */}
           <button
-            onClick={onTogglePlay}
+            onClick={() => {
+              triggerHaptic();
+              onTogglePlay();
+            }}
             className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95 shadow-md"
             style={{
               backgroundColor: song.accentColor || '#818cf8',
@@ -117,8 +191,11 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
 
           {/* Skip Forward */}
           <button
-            onClick={onNext}
-            className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-white/5 transition-colors"
+            onClick={() => {
+              triggerHaptic();
+              onNext();
+            }}
+            className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-white/5 active:scale-90 transition-all"
             title="Next Track"
           >
             <SkipForward className="w-4 h-4 sm:w-5 sm:h-5" />

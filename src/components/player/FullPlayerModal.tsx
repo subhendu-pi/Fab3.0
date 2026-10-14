@@ -26,6 +26,7 @@ import {
   ListMusic,
   Gauge,
   Share2,
+  Infinity,
 } from 'lucide-react';
 
 interface FullPlayerModalProps {
@@ -55,6 +56,15 @@ interface FullPlayerModalProps {
   onSetSleepTimer: (minutes: number | null) => void;
   onPlayQueueSong: (song: Song) => void;
   onRemoveQueueSong: (songId: string) => void;
+  isInfinity?: boolean;
+  onToggleInfinity?: () => void;
+  recommendations?: Song[];
+  isLoadingRecommendations?: boolean;
+  isAutoRecommend?: boolean;
+  onToggleAutoRecommend?: () => void;
+  onAddRecommendationToQueue?: (song: Song) => void;
+  onAddAllRecommendations?: () => void;
+  onRefreshRecommendations?: () => void;
 }
 
 export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
@@ -84,6 +94,15 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
   onSetSleepTimer,
   onPlayQueueSong,
   onRemoveQueueSong,
+  isInfinity = true,
+  onToggleInfinity,
+  recommendations = [],
+  isLoadingRecommendations = false,
+  isAutoRecommend = true,
+  onToggleAutoRecommend,
+  onAddRecommendationToQueue,
+  onAddAllRecommendations,
+  onRefreshRecommendations,
 }) => {
   const [activeMode, setActiveMode] = useState<PlayerViewMode>('disc');
   const [showSleepTimer, setShowSleepTimer] = useState(false);
@@ -106,8 +125,42 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
     setTimeout(() => setCopyFeedback(false), 2000);
   };
 
+  const touchStartYRef = React.useRef<number>(0);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const diff = e.changedTouches[0].clientY - touchStartYRef.current;
+    if (diff > 75 && touchStartYRef.current < 260) {
+      onClose();
+    }
+  };
+
+  const triggerHaptic = () => {
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate?.(12);
+      } catch {}
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-2xl text-white overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      className="fixed inset-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-2xl text-white overflow-hidden animate-in fade-in zoom-in-95 duration-200 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+    >
+      {/* Mobile Swipe-Down Pill Handle */}
+      <div
+        onClick={onClose}
+        className="w-full pt-2.5 pb-1 flex justify-center cursor-pointer group shrink-0 sm:hidden"
+        title="Swipe down to dismiss"
+      >
+        <div className="w-12 h-1.5 rounded-full bg-white/30 group-hover:bg-white/50 transition-colors" />
+      </div>
+
       {/* Dynamic Background Hue Flare */}
       <div
         className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full blur-[130px] opacity-25 pointer-events-none transition-all duration-700"
@@ -115,9 +168,12 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
       />
 
       {/* Header */}
-      <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/10 shrink-0">
+      <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 py-2.5 sm:py-4 border-b border-white/10 shrink-0">
         <button
-          onClick={onClose}
+          onClick={() => {
+            triggerHaptic();
+            onClose();
+          }}
           className="p-2 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white transition-colors"
           title="Minimize player"
         >
@@ -166,10 +222,13 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
       </header>
 
       {/* Mode Navigation Tabs */}
-      <div className="relative z-10 flex items-center justify-center gap-1 py-2 px-4 border-b border-white/5 bg-black/20 shrink-0">
+      <div className="relative z-10 flex items-center justify-start sm:justify-center gap-1.5 py-2 px-3 sm:px-4 border-b border-white/5 bg-black/20 shrink-0 overflow-x-auto no-scrollbar">
         <button
-          onClick={() => setActiveMode('disc')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+          onClick={() => {
+            triggerHaptic();
+            setActiveMode('disc');
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
             activeMode === 'disc'
               ? 'bg-white/15 text-white shadow-sm'
               : 'text-zinc-400 hover:text-zinc-200'
@@ -180,8 +239,11 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveMode('album')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+          onClick={() => {
+            triggerHaptic();
+            setActiveMode('album');
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
             activeMode === 'album'
               ? 'bg-white/15 text-white shadow-sm'
               : 'text-zinc-400 hover:text-zinc-200'
@@ -192,8 +254,11 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveMode('lyrics')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+          onClick={() => {
+            triggerHaptic();
+            setActiveMode('lyrics');
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
             activeMode === 'lyrics'
               ? 'bg-white/15 text-white shadow-sm'
               : 'text-zinc-400 hover:text-zinc-200'
@@ -204,8 +269,11 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveMode('equalizer')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+          onClick={() => {
+            triggerHaptic();
+            setActiveMode('equalizer');
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
             activeMode === 'equalizer'
               ? 'bg-white/15 text-white shadow-sm'
               : 'text-zinc-400 hover:text-zinc-200'
@@ -216,8 +284,11 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveMode('queue')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+          onClick={() => {
+            triggerHaptic();
+            setActiveMode('queue');
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
             activeMode === 'queue'
               ? 'bg-white/15 text-white shadow-sm'
               : 'text-zinc-400 hover:text-zinc-200'
@@ -279,12 +350,25 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
             onPlaySong={onPlayQueueSong}
             onRemoveFromQueue={onRemoveQueueSong}
             accentColor={song.accentColor}
+            recommendations={recommendations}
+            isLoadingRecommendations={isLoadingRecommendations}
+            isAutoRecommend={isAutoRecommend}
+            onToggleAutoRecommend={onToggleAutoRecommend}
+            onAddRecommendationToQueue={onAddRecommendationToQueue}
+            onAddAllRecommendations={onAddAllRecommendations}
+            onRefreshRecommendations={onRefreshRecommendations}
+            isInfinity={isInfinity}
+            onToggleInfinity={onToggleInfinity}
+            repeatMode={repeatMode}
+            onToggleRepeat={onToggleRepeat}
+            isShuffle={isShuffle}
+            onToggleShuffle={onToggleShuffle}
           />
         )}
       </div>
 
       {/* Bottom Player Controller Bar */}
-      <div className="relative z-20 w-full max-w-2xl mx-auto px-6 pb-6 pt-2 shrink-0">
+      <div className="relative z-20 w-full max-w-2xl mx-auto px-4 sm:px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-2 shrink-0">
         {/* Track Info (when in disc/lyrics/eq mode) */}
         {activeMode !== 'album' && (
           <div className="flex items-center justify-between mb-3">
@@ -295,8 +379,11 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
               <p className="text-xs text-zinc-400 truncate">{song.artist}</p>
             </div>
             <button
-              onClick={() => onToggleLike(song.id)}
-              className="p-2 rounded-full hover:bg-white/10 transition-colors shrink-0"
+              onClick={() => {
+                triggerHaptic();
+                onToggleLike(song.id);
+              }}
+              className="p-2.5 rounded-full hover:bg-white/10 active:scale-95 transition-all shrink-0"
               title={isLiked ? 'Remove from favorites' : 'Add to favorites'}
             >
               <Heart
@@ -317,7 +404,7 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
               max={duration || 100}
               value={currentTime}
               onChange={(e) => onSeek(Number(e.target.value))}
-              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer focus:outline-none accent-indigo-500"
+              className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer focus:outline-none accent-indigo-500"
               style={{
                 background: `linear-gradient(to right, ${song.accentColor} ${progressPercent}%, rgba(255,255,255,0.15) ${progressPercent}%)`,
               }}
@@ -330,32 +417,41 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
           </div>
         </div>
 
-        {/* Primary Controls Row */}
+        {/* Primary Controls Row: Shuffle, Prev, Play/Pause, Next, 3-Tap Loop, Infinity */}
         <div className="flex items-center justify-between w-full">
           {/* Shuffle Button */}
           <button
-            onClick={onToggleShuffle}
-            className={`p-2.5 rounded-full transition-colors ${
+            onClick={() => {
+              triggerHaptic();
+              onToggleShuffle();
+            }}
+            className={`p-2.5 rounded-full transition-colors active:scale-90 ${
               isShuffle ? 'text-indigo-400 bg-white/10' : 'text-zinc-400 hover:text-white'
             }`}
             title={`Shuffle: ${isShuffle ? 'ON' : 'OFF'}`}
           >
-            <Shuffle className="w-4 h-4" />
+            <Shuffle className="w-5 h-5" />
           </button>
 
           {/* Previous Track */}
           <button
-            onClick={onPrevious}
-            className="p-2.5 rounded-full text-zinc-200 hover:text-white hover:bg-white/10 transition-colors"
+            onClick={() => {
+              triggerHaptic();
+              onPrevious();
+            }}
+            className="p-2.5 rounded-full text-zinc-200 hover:text-white hover:bg-white/10 active:scale-90 transition-all"
             title="Previous track"
           >
-            <SkipBack className="w-5 h-5" />
+            <SkipBack className="w-6 h-6" />
           </button>
 
           {/* Big Play / Pause Button */}
           <button
-            onClick={onTogglePlay}
-            className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95"
+            onClick={() => {
+              triggerHaptic();
+              onTogglePlay();
+            }}
+            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95"
             style={{
               backgroundColor: song.accentColor,
               boxShadow: `0 0 25px ${song.accentColor}66`,
@@ -363,37 +459,61 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
             title={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? (
-              <Pause className="w-6 h-6 text-black fill-black" />
+              <Pause className="w-6 h-6 sm:w-7 sm:h-7 text-black fill-black" />
             ) : (
-              <Play className="w-6 h-6 text-black fill-black ml-0.5" />
+              <Play className="w-6 h-6 sm:w-7 sm:h-7 text-black fill-black ml-0.5" />
             )}
           </button>
 
           {/* Next Track */}
           <button
-            onClick={onNext}
-            className="p-2.5 rounded-full text-zinc-200 hover:text-white hover:bg-white/10 transition-colors"
+            onClick={() => {
+              triggerHaptic();
+              onNext();
+            }}
+            className="p-2.5 rounded-full text-zinc-200 hover:text-white hover:bg-white/10 active:scale-90 transition-all"
             title="Next track"
           >
-            <SkipForward className="w-5 h-5" />
+            <SkipForward className="w-6 h-6" />
           </button>
 
-          {/* Repeat Mode Button */}
+          {/* 3-Tap Repeat / Loop Button: (Off -> All -> One) */}
           <button
-            onClick={onToggleRepeat}
-            className={`p-2.5 rounded-full transition-colors ${
+            onClick={() => {
+              triggerHaptic();
+              onToggleRepeat();
+            }}
+            className={`p-2.5 rounded-full transition-colors active:scale-90 ${
               repeatMode !== 'off'
                 ? 'text-indigo-400 bg-white/10'
                 : 'text-zinc-400 hover:text-white'
             }`}
-            title={`Repeat mode: ${repeatMode}`}
+            title={`Loop Mode (Tap to cycle): ${
+              repeatMode === 'one' ? 'Loop Once' : repeatMode === 'all' ? 'Loop All' : 'Loop Off'
+            }`}
           >
             {repeatMode === 'one' ? (
-              <Repeat1 className="w-4 h-4 text-indigo-400" />
+              <Repeat1 className="w-5 h-5 text-indigo-400" />
             ) : (
-              <Repeat className="w-4 h-4" />
+              <Repeat className={`w-5 h-5 ${repeatMode === 'all' ? 'text-indigo-400' : ''}`} />
             )}
           </button>
+
+          {/* Infinity (Autoplay) Button */}
+          {onToggleInfinity && (
+            <button
+              onClick={() => {
+                triggerHaptic();
+                onToggleInfinity();
+              }}
+              className={`p-2.5 rounded-full transition-colors active:scale-90 ${
+                isInfinity ? 'text-indigo-400 bg-white/10 shadow-[0_0_12px_rgba(129,140,248,0.3)]' : 'text-zinc-500 hover:text-white'
+              }`}
+              title={`Infinity Autoplay: ${isInfinity ? 'ON (Endless Radio Recommendations)' : 'OFF'}`}
+            >
+              <Infinity className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Secondary controls: Volume & Speed */}

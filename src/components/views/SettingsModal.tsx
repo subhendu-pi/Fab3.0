@@ -1,6 +1,6 @@
 import React from 'react';
 import { ColorTheme, ThemeBrightness } from '../../types/music';
-import { Palette, Sun, Moon, Shield, Volume2, X, Sparkles, Check } from 'lucide-react';
+import { Palette, Sun, Moon, Shield, Volume2, X, Sparkles, Check, Keyboard } from 'lucide-react';
 import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 interface SettingsModalProps {
@@ -111,6 +111,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             Offline App &amp; Installation
           </label>
           <PWAInstallButton variant="settings" />
+        </div>
+
+        {/* Global Keyboard Shortcuts Cheat Sheet */}
+        <div className="space-y-3">
+          <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Keyboard className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Playback Keyboard Shortcuts</span>
+          </label>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-900 border border-white/5">
+              <span className="text-zinc-300">Play / Pause</span>
+              <kbd className="px-2 py-0.5 rounded bg-white/10 font-mono text-[11px] text-zinc-200">Space</kbd>
+            </div>
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-900 border border-white/5">
+              <span className="text-zinc-300">Seek ±5s</span>
+              <kbd className="px-2 py-0.5 rounded bg-white/10 font-mono text-[11px] text-zinc-200">← / →</kbd>
+            </div>
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-900 border border-white/5">
+              <span className="text-zinc-300">Prev / Next</span>
+              <kbd className="px-2 py-0.5 rounded bg-white/10 font-mono text-[11px] text-zinc-200">J / K</kbd>
+            </div>
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-900 border border-white/5">
+              <span className="text-zinc-300">Volume ±5%</span>
+              <kbd className="px-2 py-0.5 rounded bg-white/10 font-mono text-[11px] text-zinc-200">↑ / ↓</kbd>
+            </div>
+          </div>
         </div>
 
         {/* Audio Engine Specs */}

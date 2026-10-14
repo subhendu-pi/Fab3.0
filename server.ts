@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -238,6 +239,134 @@ app.get('/api/yt/charts', async (req, res) => {
   }
 });
 
+// 2.5. Recommendations & Radio endpoint
+app.get('/api/yt/recommendations', async (req, res) => {
+  try {
+    const videoId = req.query.videoId as string;
+    const artist = req.query.artist as string;
+    const genre = req.query.genre as string;
+    const title = req.query.title as string;
+
+    const recommendations: any[] = [];
+
+    // 1. If videoId exists, use YouTube Music's RDAMVM auto-mix radio
+    if (videoId && videoId.length > 5) {
+      try {
+        const nextRes = await fetch('https://music.youtube.com/youtubei/v1/next?prettyPrint=false', {
+          method: 'POST',
+          headers: YTM_HEADERS,
+          body: JSON.stringify({
+            context: YTM_CONTEXT,
+            videoId,
+            playlistId: 'RDAMVM' + videoId,
+          }),
+        });
+
+        if (nextRes.ok) {
+          const nextData = await nextRes.json();
+          const tabs =
+            nextData?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer
+              ?.watchNextTabbedResultsRenderer?.tabs;
+          const queueRenderer = tabs?.[0]?.tabRenderer?.content?.musicQueueRenderer;
+          const playlistItems = queueRenderer?.content?.playlistPanelRenderer?.contents || [];
+
+          for (const item of playlistItems) {
+            const r = item?.playlistPanelVideoRenderer;
+            if (!r || !r.videoId || r.videoId === videoId) continue;
+
+            const t = r.title?.runs?.[0]?.text;
+            const a = r.shortBylineText?.runs?.map((x: any) => x.text).join('') || 'YouTube Artist';
+            const duration = parseDurationSecs(r.lengthText?.runs?.[0]?.text);
+            const thumb = r.thumbnail?.thumbnails?.slice(-1)[0]?.url;
+
+            if (t) {
+              recommendations.push({
+                id: r.videoId,
+                videoId: r.videoId,
+                title: t,
+                artist: a,
+                album: 'Radio Recommendations',
+                duration: duration || 200,
+                coverUrl: thumb,
+                genre: genre || 'YouTube Music',
+                year: 2024,
+                plays: Math.floor(Math.random() * 200000) + 15000,
+                audioType: 'youtube',
+                accentColor: '#14b8a6',
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Radio playlist fetch error:', err);
+      }
+    }
+
+    // 2. If recommendations are still empty, fall back to searching similar tracks by artist / genre
+    if (recommendations.length === 0) {
+      const searchQuery = artist && artist !== 'Unknown Artist' ? `${artist} songs` : `${genre || title || 'popular'} music`;
+      try {
+        const searchRes = await fetch('https://music.youtube.com/youtubei/v1/search?prettyPrint=false', {
+          method: 'POST',
+          headers: YTM_HEADERS,
+          body: JSON.stringify({
+            context: YTM_CONTEXT,
+            query: searchQuery,
+            params: 'Eg-KAQwIARAAGAAgACgAMABqChAEEAMQCRAFEAo%3D',
+          }),
+        });
+
+        if (searchRes.ok) {
+          const data = await searchRes.json();
+          const sections =
+            data?.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents || [];
+
+          for (const section of sections) {
+            const items = section?.itemSectionRenderer?.contents || section?.musicShelfRenderer?.contents || [];
+            for (const item of items) {
+              const r = item?.musicResponsiveListItemRenderer;
+              if (!r) continue;
+              const vId =
+                r?.playlistItemData?.videoId ||
+                r?.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint
+                  ?.watchEndpoint?.videoId;
+              const t = r?.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+              const subtitleRuns = r?.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+              const a = subtitleRuns[2]?.text || subtitleRuns[0]?.text || 'Recommended Artist';
+              const duration = parseDurationSecs(subtitleRuns.slice(-1)[0]?.text);
+              const thumb = r?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url;
+
+              if (vId && t && vId !== videoId) {
+                recommendations.push({
+                  id: vId,
+                  videoId: vId,
+                  title: t,
+                  artist: a,
+                  album: 'Recommended For You',
+                  duration: duration || 190,
+                  coverUrl: thumb,
+                  genre: genre || 'Music',
+                  year: 2024,
+                  plays: 64000,
+                  audioType: 'youtube',
+                  accentColor: '#818cf8',
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Fallback recommendations search error:', err);
+      }
+    }
+
+    res.json({ recommendations });
+  } catch (error: any) {
+    console.error('Recommendations error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 3. Lyrics endpoint (combines LrcLib synced lyrics + YouTube Music fallback)
 app.get('/api/yt/lyrics', async (req, res) => {
   try {
@@ -376,10 +505,17 @@ app.get('/api/yt/suggestions', async (req, res) => {
 
 // Mount Vite or serve static
 async function startServer() {
+  const server = http.createServer(app);
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
+    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
+
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: isHmrDisabled ? false : { server },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -390,7 +526,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`FabTune YouTube Music Server running on http://0.0.0.0:${PORT}`);
   });
 }

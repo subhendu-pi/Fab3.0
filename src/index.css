@@ -1,16 +1,39 @@
 @import "tailwindcss";
 
 @layer base {
+  html, body {
+    height: 100%;
+    overscroll-behavior-y: none;
+    -webkit-overflow-scrolling: touch;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     user-select: none;
     -webkit-user-select: none;
+    -webkit-touch-callout: none;
     overflow-x: hidden;
   }
   
+  button, a, input, select {
+    touch-action: manipulation;
+  }
+
   code, pre, .font-mono {
     font-family: 'JetBrains Mono', monospace;
   }
+}
+
+/* Safe area padding utilities for mobile phone notches and home bars */
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+.pt-safe {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+.bottom-safe {
+  bottom: env(safe-area-inset-bottom);
 }
 
 /* Custom smooth scrollbar */
