@@ -1,7 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ColorTheme, ThemeBrightness } from '../../types/music';
-import { Palette, Sun, Moon, Shield, Volume2, X, Sparkles, Check, Keyboard } from 'lucide-react';
+import {
+  Palette,
+  Sun,
+  Moon,
+  Shield,
+  Volume2,
+  X,
+  Sparkles,
+  Check,
+  Keyboard,
+  Lock,
+  Radio,
+  Eye,
+  CheckCircle2,
+} from 'lucide-react';
 import { PWAInstallButton } from '../pwa/PWAInstallButton';
+import { backgroundPlayerService } from '../../services/backgroundPlayer';
 
 interface SettingsModalProps {
   colorTheme: ColorTheme;
@@ -29,13 +44,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onResetData,
 }) => {
+  const [bgPlay, setBgPlay] = useState<boolean>(() =>
+    backgroundPlayerService.getBackgroundPlayEnabled()
+  );
+  const [wakeLock, setWakeLock] = useState<boolean>(() =>
+    backgroundPlayerService.getWakeLockEnabled()
+  );
+  const [lockControls, setLockControls] = useState<boolean>(() =>
+    backgroundPlayerService.getLockControlsEnabled()
+  );
+
+  const handleToggleBgPlay = () => {
+    const next = !bgPlay;
+    setBgPlay(next);
+    backgroundPlayerService.setBackgroundPlayEnabled(next);
+  };
+
+  const handleToggleWakeLock = () => {
+    const next = !wakeLock;
+    setWakeLock(next);
+    backgroundPlayerService.setWakeLockEnabled(next);
+  };
+
+  const handleToggleLockControls = () => {
+    const next = !lockControls;
+    setLockControls(next);
+    backgroundPlayerService.setLockControlsEnabled(next);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in select-none">
-      <div className="relative w-full max-w-lg rounded-3xl bg-zinc-950 border border-white/10 shadow-2xl p-6 text-white space-y-6">
-        <div className="flex items-center justify-between pb-3 border-b border-white/10">
+      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl bg-zinc-950 border border-white/10 shadow-2xl p-6 text-white space-y-6">
+        <div className="flex items-center justify-between pb-3 border-b border-white/10 sticky top-0 bg-zinc-950 z-10">
           <div className="flex items-center gap-2">
             <Palette className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold tracking-tight">App Settings & Appearance</h2>
+            <h2 className="text-xl font-bold tracking-tight">App Settings &amp; Playback</h2>
           </div>
           <button
             onClick={onClose}
@@ -43,6 +86,97 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Background Playback & Lock Screen Configuration */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Background Play &amp; Screen Lock</span>
+            </label>
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-semibold text-emerald-300">
+              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+              <span>Engine Active</span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {/* Toggle 1: Background Playback */}
+            <div
+              onClick={handleToggleBgPlay}
+              className="flex items-center justify-between p-3 rounded-2xl bg-zinc-900/80 hover:bg-zinc-900 border border-white/5 cursor-pointer transition-colors"
+            >
+              <div className="space-y-0.5 pr-2">
+                <div className="flex items-center gap-2">
+                  <Radio className="w-4 h-4 text-emerald-400" />
+                  <span className="text-sm font-semibold text-zinc-200">
+                    Background Audio Playback
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-snug">
+                  Keep music streaming when you press Home, switch apps, or turn off the screen.
+                </p>
+              </div>
+              <div
+                className={`w-11 h-6 shrink-0 rounded-full transition-colors flex items-center px-1 ${
+                  bgPlay ? 'bg-emerald-500 justify-end' : 'bg-zinc-700 justify-start'
+                }`}
+              >
+                <div className="w-4 h-4 rounded-full bg-white shadow-md transform transition-transform" />
+              </div>
+            </div>
+
+            {/* Toggle 2: Lock Screen Media Controls */}
+            <div
+              onClick={handleToggleLockControls}
+              className="flex items-center justify-between p-3 rounded-2xl bg-zinc-900/80 hover:bg-zinc-900 border border-white/5 cursor-pointer transition-colors"
+            >
+              <div className="space-y-0.5 pr-2">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-indigo-400" />
+                  <span className="text-sm font-semibold text-zinc-200">
+                    Lock Screen Media Controls
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-snug">
+                  Control play/pause, seek ±10s, next/previous tracks, and view album art on lock screen.
+                </p>
+              </div>
+              <div
+                className={`w-11 h-6 shrink-0 rounded-full transition-colors flex items-center px-1 ${
+                  lockControls ? 'bg-indigo-500 justify-end' : 'bg-zinc-700 justify-start'
+                }`}
+              >
+                <div className="w-4 h-4 rounded-full bg-white shadow-md transform transition-transform" />
+              </div>
+            </div>
+
+            {/* Toggle 3: Keep Screen Awake */}
+            <div
+              onClick={handleToggleWakeLock}
+              className="flex items-center justify-between p-3 rounded-2xl bg-zinc-900/80 hover:bg-zinc-900 border border-white/5 cursor-pointer transition-colors"
+            >
+              <div className="space-y-0.5 pr-2">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm font-semibold text-zinc-200">
+                    Keep Screen Awake (Wake Lock)
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-snug">
+                  Prevent screen timeout while turntable disc or live synchronized lyrics are active.
+                </p>
+              </div>
+              <div
+                className={`w-11 h-6 shrink-0 rounded-full transition-colors flex items-center px-1 ${
+                  wakeLock ? 'bg-amber-500 justify-end' : 'bg-zinc-700 justify-start'
+                }`}
+              >
+                <div className="w-4 h-4 rounded-full bg-white shadow-md transform transition-transform" />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Dynamic Material 3 Palette */}
@@ -145,10 +279,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 space-y-2 text-xs text-zinc-400">
           <div className="flex items-center gap-2 font-semibold text-zinc-200">
             <Volume2 className="w-4 h-4 text-emerald-400" />
-            <span>Audio Architecture &amp; Offline Cache</span>
+            <span>Audio Architecture &amp; Background Playback</span>
           </div>
           <p className="leading-relaxed">
-            Engineered with a progressive Service Worker cache, Web Audio API 10-band BiquadFilter equalizer, procedural polyphony, and local audio importer.
+            Engineered with Web Audio lookahead scheduling, mobile OS audio keep-alive session, Web Worker clock, MediaSession lock screen actions, and 10-band BiquadFilter equalizer.
           </p>
         </div>
 

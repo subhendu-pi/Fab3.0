@@ -7,7 +7,7 @@ import {
   ThemeBrightness,
   UserListeningStats,
 } from './types/music';
-import { INITIAL_PLAYLISTS } from './data/musicData';
+import { INITIAL_PLAYLISTS, INITIAL_SONGS } from './data/musicData';
 import { useMusicPlayer } from './hooks/useMusicPlayer';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useSleepTimer } from './hooks/useSleepTimer';
@@ -36,6 +36,7 @@ const STORAGE_KEY_PLAYLISTS = 'fabtune_playlists';
 const STORAGE_KEY_THEME = 'fabtune_theme';
 const STORAGE_KEY_BRIGHTNESS = 'fabtune_brightness';
 const STORAGE_KEY_STATS = 'fabtune_stats';
+const STORAGE_KEY_RECENTLY_PLAYED = 'fabtune_recently_played';
 
 const ACCENT_COLORS: Record<ColorTheme, string> = {
   'monet-teal': '#14b8a6',
@@ -63,22 +64,48 @@ export default function App() {
     return (localStorage.getItem(STORAGE_KEY_BRIGHTNESS) as ThemeBrightness) || 'dark';
   });
 
-  // Playlists & Favorites
+  // Playlists & Favorites (purges default 4 playlists if in cache)
   const [playlists, setPlaylists] = useState<Playlist[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_PLAYLISTS);
-      return saved ? JSON.parse(saved) : INITIAL_PLAYLISTS;
+      if (saved) {
+        const parsed: Playlist[] = JSON.parse(saved);
+        return parsed.filter(
+          (p) => !['pl-lofi', 'pl-synthwave', 'pl-acoustic', 'pl-top50'].includes(p.id)
+        );
+      }
+      return [];
     } catch {
-      return INITIAL_PLAYLISTS;
+      return [];
     }
+  });
+
+  // Recently / Already Played Tracks (Vertical 3-bar stack on Home)
+  const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_RECENTLY_PLAYED);
+      if (saved) {
+        const parsed: Song[] = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((s) => s && !s.id.startsWith('track-'));
+        }
+      }
+    } catch {}
+    return [];
   });
 
   const [likedSongIds, setLikedSongIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_LIKES);
-      return saved ? JSON.parse(saved) : ['track-1', 'track-2'];
+      if (saved) {
+        const parsed: string[] = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id) => !id.startsWith('track-'));
+        }
+      }
+      return [];
     } catch {
-      return ['track-1', 'track-2'];
+      return [];
     }
   });
 
@@ -86,35 +113,28 @@ export default function App() {
   const [stats, setStats] = useState<UserListeningStats>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_STATS);
-      return saved
-        ? JSON.parse(saved)
-        : {
-            totalMinutes: 4820,
-            topSongId: 'track-1',
-            topArtist: 'Celestial Beats',
-            topGenre: 'Lo-Fi / Chill',
-            playedTrackCounts: {
-              'track-1': 142,
-              'track-2': 118,
-              'track-3': 75,
-              'track-5': 62,
-              'track-7': 54,
-            },
-            personaTitle: 'The Celestial Night Owl',
-            personaDescription:
-              'You thrive in the midnight frequencies. You immerse yourself in contemplative lo-fi rhythms, nocturnal synth waves, and reflective melodies when the rest of the world is asleep.',
-          };
-    } catch {
-      return {
-        totalMinutes: 4820,
-        topSongId: 'track-1',
-        topArtist: 'Celestial Beats',
-        topGenre: 'Lo-Fi / Chill',
-        playedTrackCounts: {},
-        personaTitle: 'The Celestial Night Owl',
-        personaDescription: 'You thrive in the midnight frequencies.',
-      };
-    }
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.playedTrackCounts) {
+          const cleaned: Record<string, number> = {};
+          for (const [k, v] of Object.entries(parsed.playedTrackCounts)) {
+            if (!k.startsWith('track-')) cleaned[k] = v as number;
+          }
+          parsed.playedTrackCounts = cleaned;
+        }
+        return parsed;
+      }
+    } catch {}
+    return {
+      totalMinutes: 0,
+      topSongId: '',
+      topArtist: 'Explorer',
+      topGenre: 'Discovering',
+      playedTrackCounts: {},
+      personaTitle: 'Music Pioneer',
+      personaDescription:
+        'Your library is a blank slate. Search and stream tracks via YouTube Music or upload local audio files to craft your listening journey.',
+    };
   });
 
   // Persist State
@@ -138,6 +158,10 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY_STATS, JSON.stringify(stats));
   }, [stats]);
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_RECENTLY_PLAYED, JSON.stringify(recentlyPlayed));
+  }, [recentlyPlayed]);
+
   // Haptic feedback trigger for mobile devices
   const triggerHaptic = useCallback((ms = 10) => {
     if (typeof window !== 'undefined' && 'vibrate' in navigator) {
@@ -147,8 +171,13 @@ export default function App() {
     }
   }, []);
 
-  // Update listening stats on track playback
+  // Update listening stats and recently played on track playback
   const handleSongPlayed = useCallback((song: Song) => {
+    setRecentlyPlayed((prev) => {
+      const filtered = prev.filter((s) => s.id !== song.id);
+      return [song, ...filtered].slice(0, 10);
+    });
+
     setStats((prev) => {
       const currentCount = prev.playedTrackCounts[song.id] || 0;
       return {
@@ -236,7 +265,7 @@ export default function App() {
       title,
       description,
       coverGradient: 'from-fuchsia-600 via-purple-700 to-indigo-950',
-      songIds: [currentSong.id],
+      songIds: currentSong ? [currentSong.id] : [],
       createdAt: new Date().toISOString().slice(0, 10),
       isCustom: true,
     };
@@ -262,6 +291,18 @@ export default function App() {
       );
     }
   };
+
+  const handlePlayPhaseShuffle = useCallback(
+    (phaseSongs: Song[]) => {
+      if (phaseSongs.length === 0) return;
+      setQueue(phaseSongs);
+      if (!isShuffle) {
+        toggleShuffle();
+      }
+      playSong(phaseSongs[0]);
+    },
+    [isShuffle, playSong, setQueue, toggleShuffle]
+  );
 
   const toggleLike = (songId: string) => {
     setLikedSongIds((prev) =>
@@ -311,11 +352,22 @@ export default function App() {
             currentSong={currentSong}
             isPlaying={isPlaying}
             likedSongIds={likedSongIds}
+            recentlyPlayed={recentlyPlayed}
             onPlaySong={playSong}
             onTogglePlay={togglePlay}
             onToggleLike={toggleLike}
             onSelectPlaylist={setSelectedPlaylist}
             onOpenWrapped={() => setShowWrapped(true)}
+            onAddToQueue={handleAddToQueue}
+            onPlayPhaseShuffle={handlePlayPhaseShuffle}
+            onOpenTurntable={() => setShowFullPlayer(true)}
+            onOpenLyrics={() => setShowFullPlayer(true)}
+            onSetSleepTimer={handleSetSleepTimer}
+            sleepTimerRemaining={sleepTimerRemaining}
+            onSpeedChange={handleSpeedChange}
+            speed={playbackSpeed}
+            onNavigateTab={setActiveTab}
+            onAddLocalSong={handleAddLocalSong}
           />
         )}
 

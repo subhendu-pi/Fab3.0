@@ -59,8 +59,22 @@ An elegant, high-performance music streaming client and audio player engineered 
 
 ### 📱 7. Standalone Android APK & PWA Capabilities
 - **Native Android APK (`FabTune.apk`)**: Pre-compiled and signed package ready for instant sideloading on Android 11 through Android 15+.
-- **QR Code Mobile Sideloading**: Display an on-screen QR code to scan with any smartphone camera for immediate direct APK download.
 - **Full Offline Fallback**: Bundled offline player engine ensures playback functionality even without network connectivity.
+
+### 🎧 8. Background Playback & Screen-Lock Audio Engine
+- **Uninterrupted Home & Background Play**: Music continues streaming seamlessly when navigating to the phone home screen, switching between apps, or browsing other tabs.
+- **Screen-Lock Playback**: Keeps playing through phone screen lock and standby mode without throttling or stopping.
+- **Mobile Audio Session Keep-Alive**: Uses a persistent audio carrier and Web Audio `MediaStreamDestination` to prevent mobile OS battery optimizers from suspending the audio daemon.
+- **Lookahead Web Audio Scheduler & Web Worker Clock**: Employs an isolated Web Worker clock and pre-scheduling queue (1.2s lookahead) to eliminate timer stutter caused by OS background throttling.
+- **Lock-Screen Media Controls**: Full MediaSession API integration providing lock-screen cover art, track info, play/pause, next/previous track, and ±10s seek controls on lock screens, notifications, dynamic islands, smartwatches, and bluetooth headsets.
+- **Screen Wake Lock API**: Optional toggle in Settings to keep the display awake during immersive vinyl turntable and lyrics sessions.
+
+### 🔀 9. 3x3 Shuffling Phase Matrix & Audio Immersion Studio
+- **3x3 Shuffling Play Card Phase**: A responsive 9-card discovery grid on the home screen with a master 'Reshuffle Deck' button (spinning shuffle animation) and 'Play Phase' queue action.
+- **3-Track Vertical Play Bar**: Three sleek horizontal bars displaying recently played tracks with live streaming equalizer indicators, time-stamps, like/queue shortcuts, and instant one-tap playback resume.
+- **Audio Vibe & Tempo Warper**: One-tap realtime sound transformations including Nightcore (1.25x tempo + crisp treble), Slowed & Reverb (0.85x tempo + deep bass), Vinyl Lo-Fi Warmth, and Bass Cannon 8D.
+- **Procedural Ambient Immersion Mixer**: Four offline Web Audio ambient generators (Midnight Rain, Vinyl Cafe, Forest Pine Breeze, and Cosmic Drone) that can be mixed at custom volumes beneath active music playback.
+- **Quick Studio Launchers**: Fast one-touch sleep timer buttons (15m, 30m, 45m, 60m), direct Vinyl Studio launcher, and Karaoke Synchronized Lyrics mode.
 
 ---
 

@@ -298,6 +298,23 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               </div>
             </div>
           ))}
+
+          {playlists.length === 0 && (
+            <div
+              onClick={() => setShowCreateModal(true)}
+              className="p-5 rounded-2xl border border-dashed border-white/20 hover:border-indigo-400/50 bg-zinc-900/30 hover:bg-zinc-900/60 cursor-pointer transition-all flex flex-col items-center justify-center text-center h-44 group"
+            >
+              <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-400/20 flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform">
+                <Plus className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors mt-3">
+                Create First Playlist
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1 max-w-[200px]">
+                Organize your favorite tracks into custom collections
+              </p>
+            </div>
+          )}
         </div>
       )}
 

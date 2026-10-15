@@ -6,11 +6,14 @@ interface MediaSessionCallbacks {
   onNext: () => void;
   onPrevious: () => void;
   onSeek: (seconds: number) => void;
+  onRelativeSeek?: (deltaSeconds: number) => void;
 }
 
 class MediaSessionManager {
   private isSupported: boolean = false;
-  private currentSongId: string | null = null;
+  private currentSong: Song | null = null;
+  private lastPosition: number = 0;
+  private lastDuration: number = 180;
 
   constructor() {
     this.isSupported = typeof window !== 'undefined' && 'mediaSession' in navigator;
@@ -25,10 +28,12 @@ class MediaSessionManager {
         ['pause', () => callbacks.onPause()],
         ['previoustrack', () => callbacks.onPrevious()],
         ['nexttrack', () => callbacks.onNext()],
+        ['stop', () => callbacks.onPause()],
         [
           'seekto',
           (details) => {
             if (details.seekTime !== undefined) {
+              this.lastPosition = details.seekTime;
               callbacks.onSeek(details.seekTime);
             }
           },
@@ -37,13 +42,26 @@ class MediaSessionManager {
           'seekbackward',
           (details) => {
             const skip = details.seekOffset || 10;
-            // Seek handled via seekto or relative offset
+            if (callbacks.onRelativeSeek) {
+              callbacks.onRelativeSeek(-skip);
+            } else {
+              const target = Math.max(0, this.lastPosition - skip);
+              this.lastPosition = target;
+              callbacks.onSeek(target);
+            }
           },
         ],
         [
           'seekforward',
           (details) => {
             const skip = details.seekOffset || 10;
+            if (callbacks.onRelativeSeek) {
+              callbacks.onRelativeSeek(skip);
+            } else {
+              const target = Math.min(this.lastDuration, this.lastPosition + skip);
+              this.lastPosition = target;
+              callbacks.onSeek(target);
+            }
           },
         ],
       ];
@@ -52,7 +70,7 @@ class MediaSessionManager {
         try {
           navigator.mediaSession.setActionHandler(action, handler);
         } catch {
-          // Action might not be supported on this browser
+          // Action not supported on this specific browser/OS
         }
       }
     } catch (e) {
@@ -64,12 +82,13 @@ class MediaSessionManager {
     if (!this.isSupported) return;
 
     try {
+      this.currentSong = song;
       const artworkSrc = song.coverUrl || '/pwa-512x512.png';
 
       navigator.mediaSession.metadata = new MediaMetadata({
         title: song.title,
         artist: song.artist,
-        album: song.album || 'FabTune',
+        album: song.album || 'FabTune Music',
         artwork: [
           { src: artworkSrc, sizes: '96x96', type: 'image/png' },
           { src: artworkSrc, sizes: '128x128', type: 'image/png' },
@@ -79,8 +98,6 @@ class MediaSessionManager {
           { src: artworkSrc, sizes: '512x512', type: 'image/png' },
         ],
       });
-
-      this.currentSongId = song.id;
     } catch (e) {
       console.warn('Failed to update MediaMetadata:', e);
     }
@@ -98,6 +115,9 @@ class MediaSessionManager {
 
   public updatePositionState(duration: number, currentTime: number, playbackRate = 1.0) {
     if (!this.isSupported || typeof navigator.mediaSession.setPositionState !== 'function') return;
+
+    this.lastPosition = currentTime;
+    this.lastDuration = duration;
 
     try {
       if (duration > 0 && currentTime >= 0 && currentTime <= duration) {

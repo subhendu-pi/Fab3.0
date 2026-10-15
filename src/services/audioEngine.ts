@@ -1,4 +1,5 @@
 import { EQBandConfig, EQPreset, Song } from '../types/music';
+import { backgroundPlayerService } from './backgroundPlayer';
 
 export const EQ_FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 export const EQ_LABELS = ['60Hz', '170Hz', '310Hz', '600Hz', '1kHz', '3kHz', '6kHz', '12kHz', '14kHz', '16kHz'];
@@ -21,12 +22,15 @@ class AudioEngine {
   private filters: BiquadFilterNode[] = [];
   private audioElement: HTMLAudioElement | null = null;
   private mediaSource: MediaElementAudioSourceNode | null = null;
+  private mediaStreamDestination: MediaStreamAudioDestinationNode | null = null;
+  private streamAudioElement: HTMLAudioElement | null = null;
 
   // Synthesizer runtime state
   private synthInterval: number | null = null;
   private visualizerPulseInterval: number | null = null;
   private currentSong: Song | null = null;
   private isPlaying: boolean = false;
+  private isUserInitiatedPause: boolean = true;
   private currentTime: number = 0;
   private playbackRate: number = 1.0;
   private volume: number = 0.85;
@@ -34,15 +38,52 @@ class AudioEngine {
   private onTimeUpdateCallback: ((time: number) => void) | null = null;
   private onEndedCallback: (() => void) | null = null;
 
+  // Lookahead beat scheduler state for background lock-screen audio
+  private nextBeatTime: number = 0;
+  private currentBeatStep: number = 0;
+  private lastTickTimestamp: number = 0;
+
   // YouTube Player iframe integration
   private ytPlayer: any = null;
   private isYtReady: boolean = false;
-  private isYtLoading: boolean = false;
   private pendingVideoId: string | null = null;
   private ytPollInterval: number | null = null;
+  private isYtFallbackSynthActive: boolean = false;
 
   constructor() {
     this.ensureYouTubeIframeApi();
+    this.initBackgroundListeners();
+  }
+
+  private initBackgroundListeners() {
+    if (typeof window === 'undefined') return;
+
+    // Listen to background worker ticks to guarantee uninterrupted playback during screen lock
+    backgroundPlayerService.subscribeTick(() => {
+      this.handleBackgroundTick();
+    });
+
+    // Visibility change handler for screen lock / home button
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        const isHidden = document.visibilityState === 'hidden';
+        if (!isHidden && this.isPlaying) {
+          // Returning to foreground
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+          }
+          if (this.isYtFallbackSynthActive && this.currentSong?.videoId && this.ytPlayer) {
+            // Re-sync YouTube video if we fell back to synth while in background
+            try {
+              this.stopSynth();
+              this.isYtFallbackSynthActive = false;
+              this.ytPlayer.seekTo(this.currentTime, true);
+              this.ytPlayer.playVideo();
+            } catch {}
+          }
+        }
+      });
+    }
   }
 
   private ensureYouTubeIframeApi() {
@@ -107,16 +148,35 @@ class AudioEngine {
             // YT.PlayerState: -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
             if (event.data === 1) {
               this.isPlaying = true;
+              this.isYtFallbackSynthActive = false;
               this.startYtPolling();
               this.startVisualizerPulse();
+              backgroundPlayerService.onPlaybackStarted();
             } else if (event.data === 2) {
-              this.isPlaying = false;
-              this.stopYtPolling();
-              this.stopVisualizerPulse();
+              // Pause event: Check if this was a user pause or browser background pause
+              if (this.isUserInitiatedPause) {
+                this.isPlaying = false;
+                this.stopYtPolling();
+                this.stopVisualizerPulse();
+                backgroundPlayerService.onPlaybackPaused();
+              } else if (document.visibilityState === 'hidden' && backgroundPlayerService.getBackgroundPlayEnabled()) {
+                // Screen was locked or user switched to Home; YouTube paused iframe!
+                // Keep playing by falling back to procedural audio synthesis for this song
+                console.log('Background lock detected for YouTube track; maintaining audio stream');
+                this.isYtFallbackSynthActive = true;
+                this.startSynth();
+                backgroundPlayerService.onPlaybackStarted();
+              } else {
+                this.isPlaying = false;
+                this.stopYtPolling();
+                this.stopVisualizerPulse();
+                backgroundPlayerService.onPlaybackPaused();
+              }
             } else if (event.data === 0) {
               this.isPlaying = false;
               this.stopYtPolling();
               this.stopVisualizerPulse();
+              backgroundPlayerService.onPlaybackPaused();
               this.onEndedCallback?.();
             }
           },
@@ -191,9 +251,27 @@ class AudioEngine {
       this.masterGain.connect(this.analyser);
       this.analyser.connect(this.ctx.destination);
 
-      // Setup audio element for URLs / files
+      // Create MediaStreamDestination and pipe to an HTML5 Audio element for mobile OS background lock-screen persistence
+      try {
+        if (typeof this.ctx.createMediaStreamDestination === 'function') {
+          this.mediaStreamDestination = this.ctx.createMediaStreamDestination();
+          this.analyser.connect(this.mediaStreamDestination);
+
+          this.streamAudioElement = new Audio();
+          this.streamAudioElement.id = 'fabtune-stream-audio';
+          this.streamAudioElement.srcObject = this.mediaStreamDestination.stream;
+          this.streamAudioElement.setAttribute('playsinline', 'true');
+          this.streamAudioElement.volume = 0.01; // Primary audio is output via ctx.destination
+        }
+      } catch (streamErr) {
+        console.debug('MediaStreamDestination fallback to standard audio element:', streamErr);
+      }
+
+      // Setup audio element for URLs / local audio files
       this.audioElement = new Audio();
       this.audioElement.crossOrigin = 'anonymous';
+      this.audioElement.setAttribute('playsinline', 'true');
+      this.audioElement.setAttribute('webkit-playsinline', 'true');
       this.audioElement.addEventListener('timeupdate', () => {
         if (this.currentSong?.audioType === 'local' && this.audioElement) {
           this.currentTime = this.audioElement.currentTime;
@@ -201,6 +279,7 @@ class AudioEngine {
         }
       });
       this.audioElement.addEventListener('ended', () => {
+        backgroundPlayerService.onPlaybackPaused();
         this.onEndedCallback?.();
       });
 
@@ -226,10 +305,23 @@ class AudioEngine {
       await this.ctx.resume();
     }
 
+    this.isUserInitiatedPause = false;
     this.stopSynth();
     this.stopYtPolling();
     this.currentSong = song;
     this.currentTime = startTime;
+    this.lastTickTimestamp = performance.now();
+    this.currentBeatStep = Math.floor(startTime * (song.bpm ? song.bpm / 15 : 6));
+    if (this.ctx) {
+      this.nextBeatTime = this.ctx.currentTime;
+    }
+
+    // Play keepalive carrier so Android and iOS audio daemons recognize continuous playback
+    backgroundPlayerService.onPlaybackStarted();
+
+    if (this.streamAudioElement && this.streamAudioElement.paused) {
+      this.streamAudioElement.play().catch(() => {});
+    }
 
     // Check if song has YouTube Video ID
     if (song.videoId) {
@@ -296,7 +388,14 @@ class AudioEngine {
       await this.ctx.resume();
     }
 
-    if (this.currentSong?.videoId && this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
+    this.isUserInitiatedPause = false;
+    backgroundPlayerService.onPlaybackStarted();
+
+    if (this.streamAudioElement && this.streamAudioElement.paused) {
+      this.streamAudioElement.play().catch(() => {});
+    }
+
+    if (this.currentSong?.videoId && !this.isYtFallbackSynthActive && this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
       this.ytPlayer.playVideo();
       this.isPlaying = true;
       this.startYtPolling();
@@ -314,7 +413,15 @@ class AudioEngine {
   }
 
   public pause() {
+    this.isUserInitiatedPause = true;
     this.isPlaying = false;
+    this.isYtFallbackSynthActive = false;
+    backgroundPlayerService.onPlaybackPaused();
+
+    if (this.streamAudioElement && !this.streamAudioElement.paused) {
+      this.streamAudioElement.pause();
+    }
+
     if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
       try {
         this.ytPlayer.pauseVideo();
@@ -331,6 +438,10 @@ class AudioEngine {
 
   public seek(seconds: number) {
     this.currentTime = Math.max(0, Math.min(seconds, this.currentSong?.duration || 300));
+    this.currentBeatStep = Math.floor(this.currentTime * (this.currentSong?.bpm ? this.currentSong.bpm / 15 : 6));
+    if (this.ctx) {
+      this.nextBeatTime = this.ctx.currentTime;
+    }
 
     if (this.ytPlayer && typeof this.ytPlayer.seekTo === 'function' && this.currentSong?.videoId) {
       try {
@@ -399,9 +510,11 @@ class AudioEngine {
     this.stopVisualizerPulse();
     if (!this.ctx) return;
 
-    // Gentle sub-bass pulse into analyser so visualizer reflects active stream
     this.visualizerPulseInterval = window.setInterval(() => {
       if (!this.isPlaying || !this.ctx || this.filters.length === 0) return;
+      // Skip heavy visualizer pulse when tab is hidden or screen is locked
+      if (document.visibilityState === 'hidden') return;
+
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.type = 'sine';
@@ -443,20 +556,17 @@ class AudioEngine {
     };
   }
 
-  // Realistic Procedural Web Audio Synth generator
-  private startSynth() {
-    this.isPlaying = true;
-    if (this.synthInterval) {
-      clearInterval(this.synthInterval);
-    }
+  // Lookahead Web Audio beat scheduler that functions even when CPU throttles window.setInterval in the background
+  private handleBackgroundTick() {
+    if (!this.isPlaying || !this.ctx || !this.currentSong) return;
 
-    const intervalMs = 100;
-    let step = Math.floor(this.currentTime * 4);
+    // Advance playback timeline using high-resolution clock
+    const nowPerf = performance.now();
+    const deltaSeconds = Math.max(0, (nowPerf - this.lastTickTimestamp) / 1000) * this.playbackRate;
+    this.lastTickTimestamp = nowPerf;
 
-    this.synthInterval = window.setInterval(() => {
-      if (!this.isPlaying || !this.ctx || !this.currentSong) return;
-
-      this.currentTime += (intervalMs / 1000) * this.playbackRate;
+    if (deltaSeconds > 0 && deltaSeconds < 2) {
+      this.currentTime += deltaSeconds;
       this.onTimeUpdateCallback?.(this.currentTime);
 
       if (this.currentTime >= this.currentSong.duration) {
@@ -465,14 +575,35 @@ class AudioEngine {
         this.onEndedCallback?.();
         return;
       }
+    }
 
-      // Schedule notes on 16th beats
-      const currentBeatStep = Math.floor(this.currentTime * (this.currentSong.bpm ? this.currentSong.bpm / 15 : 6));
-      if (currentBeatStep !== step) {
-        step = currentBeatStep;
-        this.playProceduralVoice(step, this.currentSong);
-      }
-    }, intervalMs);
+    // Schedule audio notes ahead in time using Web Audio hardware clock
+    const scheduleAheadSeconds = 1.2;
+    const bpm = this.currentSong.bpm || 80;
+    const stepDuration = 60 / (bpm * 4); // 16th note step duration
+
+    while (this.nextBeatTime < this.ctx.currentTime + scheduleAheadSeconds) {
+      this.scheduleProceduralStep(this.currentBeatStep, this.currentSong, this.nextBeatTime);
+      this.currentBeatStep++;
+      this.nextBeatTime += stepDuration / this.playbackRate;
+    }
+  }
+
+  private startSynth() {
+    this.isPlaying = true;
+    this.lastTickTimestamp = performance.now();
+    if (this.ctx) {
+      this.nextBeatTime = this.ctx.currentTime;
+    }
+
+    if (this.synthInterval) {
+      clearInterval(this.synthInterval);
+    }
+
+    // Interval runs alongside the Web Worker for redundant clock accuracy
+    this.synthInterval = window.setInterval(() => {
+      this.handleBackgroundTick();
+    }, 60);
   }
 
   private stopSynth() {
@@ -482,9 +613,9 @@ class AudioEngine {
     }
   }
 
-  private playProceduralVoice(step: number, song: Song) {
+  // Sample-accurate scheduled notes for background & lock screen playback
+  private scheduleProceduralStep(step: number, song: Song, scheduledTime: number) {
     if (!this.ctx || this.filters.length === 0) return;
-    const now = this.ctx.currentTime;
     const targetInput = this.filters[0];
 
     const scales: Record<string, number[]> = {
@@ -498,20 +629,20 @@ class AudioEngine {
     const scale = scales[song.genre] || scales['Lo-Fi / Chill'];
     const chordRoot = scale[Math.floor(step / 16) % scale.length];
 
-    // Kick/Bass Pulse
+    // Kick / Bass pulse
     if (step % 8 === 0) {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.type = song.genre === 'Synthwave' ? 'sawtooth' : 'sine';
-      osc.frequency.setValueAtTime(chordRoot * 0.5, now);
-      osc.frequency.exponentialRampToValueAtTime(35, now + 0.25);
-      gain.gain.setValueAtTime(0.28, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.frequency.setValueAtTime(chordRoot * 0.5, scheduledTime);
+      osc.frequency.exponentialRampToValueAtTime(35, scheduledTime + 0.25);
+      gain.gain.setValueAtTime(0.28, scheduledTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, scheduledTime + 0.28);
 
       osc.connect(gain);
       gain.connect(targetInput);
-      osc.start(now);
-      osc.stop(now + 0.3);
+      osc.start(scheduledTime);
+      osc.stop(scheduledTime + 0.3);
     }
 
     // Chords / Pad Atmosphere
@@ -521,15 +652,15 @@ class AudioEngine {
         const osc = this.ctx!.createOscillator();
         const gain = this.ctx!.createGain();
         osc.type = song.genre === 'Acoustic' ? 'triangle' : 'sine';
-        osc.frequency.setValueAtTime(freq * (idx === 0 ? 1 : 1.5), now);
-        gain.gain.setValueAtTime(0.001, now);
-        gain.gain.linearRampToValueAtTime(0.045, now + 0.2);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+        osc.frequency.setValueAtTime(freq * (idx === 0 ? 1 : 1.5), scheduledTime);
+        gain.gain.setValueAtTime(0.001, scheduledTime);
+        gain.gain.linearRampToValueAtTime(0.045, scheduledTime + 0.2);
+        gain.gain.exponentialRampToValueAtTime(0.001, scheduledTime + 1.2);
 
         osc.connect(gain);
         gain.connect(targetInput);
-        osc.start(now);
-        osc.stop(now + 1.3);
+        osc.start(scheduledTime);
+        osc.stop(scheduledTime + 1.3);
       });
     }
 
@@ -539,21 +670,21 @@ class AudioEngine {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(noteFreq, now);
+      osc.frequency.setValueAtTime(noteFreq, scheduledTime);
 
-      gain.gain.setValueAtTime(0.001, now);
-      gain.gain.linearRampToValueAtTime(0.038, now + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      gain.gain.setValueAtTime(0.001, scheduledTime);
+      gain.gain.linearRampToValueAtTime(0.038, scheduledTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, scheduledTime + 0.45);
 
       osc.connect(gain);
       gain.connect(targetInput);
-      osc.start(now);
-      osc.stop(now + 0.5);
+      osc.start(scheduledTime);
+      osc.stop(scheduledTime + 0.5);
     }
 
     // Snare / Vinyl Crackle
     if (step % 8 === 4) {
-      const bufferSize = this.ctx.sampleRate * 0.06;
+      const bufferSize = Math.floor(this.ctx.sampleRate * 0.06);
       const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
       const output = buffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
@@ -565,13 +696,13 @@ class AudioEngine {
       filter.type = 'bandpass';
       filter.frequency.value = 1400;
       const gain = this.ctx.createGain();
-      gain.gain.setValueAtTime(0.04, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      gain.gain.setValueAtTime(0.04, scheduledTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, scheduledTime + 0.06);
 
       whiteNoise.connect(filter);
       filter.connect(gain);
       gain.connect(targetInput);
-      whiteNoise.start(now);
+      whiteNoise.start(scheduledTime);
     }
   }
 

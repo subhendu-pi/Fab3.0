@@ -15,12 +15,45 @@ interface UseMusicPlayerOptions {
 }
 
 export function useMusicPlayer({ onSongPlayed, onShortcutFeedback }: UseMusicPlayerOptions = {}) {
-  const [songs, setSongs] = useState<Song[]>(INITIAL_SONGS);
-  const [currentSong, setCurrentSong] = useState<Song>(INITIAL_SONGS[0]);
+  const [songs, setSongs] = useState<Song[]>(() => {
+    try {
+      const saved = localStorage.getItem('fabtune_custom_songs');
+      if (saved) {
+        const parsed: Song[] = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((s) => !s.id.startsWith('track-'));
+        }
+      }
+    } catch {}
+    return INITIAL_SONGS;
+  });
+
+  const [currentSong, setCurrentSong] = useState<Song | null>(() => {
+    try {
+      const saved = localStorage.getItem('fabtune_custom_songs');
+      if (saved) {
+        const parsed: Song[] = JSON.parse(saved);
+        const filtered = Array.isArray(parsed) ? parsed.filter((s) => !s.id.startsWith('track-')) : [];
+        if (filtered.length > 0) return filtered[0];
+      }
+    } catch {}
+    return null;
+  });
+
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
-  const [duration, setDuration] = useState<number>(INITIAL_SONGS[0].duration);
-  const [queue, setQueue] = useState<Song[]>(INITIAL_SONGS);
+  const [duration, setDuration] = useState<number>(0);
+  const [queue, setQueue] = useState<Song[]>(() => {
+    try {
+      const saved = localStorage.getItem('fabtune_custom_songs');
+      if (saved) {
+        const parsed: Song[] = JSON.parse(saved);
+        const filtered = Array.isArray(parsed) ? parsed.filter((s) => !s.id.startsWith('track-')) : [];
+        if (filtered.length > 0) return filtered;
+      }
+    } catch {}
+    return [];
+  });
   const [volume, setVolume] = useState<number>(0.85);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
@@ -87,8 +120,13 @@ export function useMusicPlayer({ onSongPlayed, onShortcutFeedback }: UseMusicPla
     localStorage.setItem(STORAGE_KEY_AUTO_RECOMMEND, String(isAutoRecommend));
   }, [isAutoRecommend]);
 
+  useEffect(() => {
+    localStorage.setItem('fabtune_custom_songs', JSON.stringify(songs));
+  }, [songs]);
+
   // Recommendation engine
-  const fetchRecommendations = useCallback(async (targetSong: Song) => {
+  const fetchRecommendations = useCallback(async (targetSong: Song | null) => {
+    if (!targetSong) return;
     setIsLoadingRecommendations(true);
 
     // 1. Instantly match relevant songs from existing catalogue
@@ -170,11 +208,15 @@ export function useMusicPlayer({ onSongPlayed, onShortcutFeedback }: UseMusicPla
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.lyrics && data.lyrics.length > 0) {
-            setCurrentSong((prev) => (prev.id === playableSong.id ? { ...prev, lyrics: data.lyrics } : prev));
+            setCurrentSong((prev) => (prev && prev.id === playableSong.id ? { ...prev, lyrics: data.lyrics } : prev));
           }
         })
         .catch(() => {});
     }
+
+    // Ensure played song is retained in user songs library
+    setSongs((prev) => (prev.some((s) => s.id === playableSong.id) ? prev : [playableSong, ...prev]));
+    setQueue((prev) => (prev.some((s) => s.id === playableSong.id) ? prev : [...prev, playableSong]));
 
     setCurrentSong(playableSong);
     setDuration(playableSong.duration || 180);
@@ -189,6 +231,7 @@ export function useMusicPlayer({ onSongPlayed, onShortcutFeedback }: UseMusicPla
   }, [fetchRecommendations, onSongPlayed]);
 
   const togglePlay = useCallback(() => {
+    if (!playerRef.current.currentSong) return;
     if (isPlaying) {
       audioEngine.pause();
       setIsPlaying(false);
@@ -199,13 +242,14 @@ export function useMusicPlayer({ onSongPlayed, onShortcutFeedback }: UseMusicPla
   }, [isPlaying]);
 
   const handleSeek = useCallback((seconds: number) => {
+    if (!playerRef.current.currentSong) return;
     audioEngine.seek(seconds);
     setCurrentTime(seconds);
   }, []);
 
   const handleNextTrack = useCallback(() => {
     const { queue: currentQueue, currentSong: activeSong, isShuffle: shuffle, repeatMode: repeat, isInfinity: infinity, recommendations: recs } = playerRef.current;
-    if (currentQueue.length === 0) return;
+    if (currentQueue.length === 0 || !activeSong) return;
 
     if (shuffle) {
       if (currentQueue.length === 1) {
@@ -249,6 +293,7 @@ export function useMusicPlayer({ onSongPlayed, onShortcutFeedback }: UseMusicPla
       return;
     }
     const { queue: currentQueue, currentSong: activeSong } = playerRef.current;
+    if (currentQueue.length === 0 || !activeSong) return;
     const currentIndex = currentQueue.findIndex((s) => s.id === activeSong.id);
     if (currentIndex > 0) {
       playSong(currentQueue[currentIndex - 1]);
@@ -288,8 +333,12 @@ export function useMusicPlayer({ onSongPlayed, onShortcutFeedback }: UseMusicPla
       onNext: () => handleNextTrack(),
       onPrevious: () => handlePreviousTrack(),
       onSeek: (seconds) => handleSeek(seconds),
+      onRelativeSeek: (delta) => {
+        const target = Math.max(0, Math.min(duration, currentTime + delta));
+        handleSeek(target);
+      },
     });
-  }, [handleNextTrack, handlePreviousTrack, handleSeek]);
+  }, [handleNextTrack, handlePreviousTrack, handleSeek, duration, currentTime]);
 
   useEffect(() => {
     mediaSessionManager.updatePlaybackState(isPlaying);
@@ -299,12 +348,12 @@ export function useMusicPlayer({ onSongPlayed, onShortcutFeedback }: UseMusicPla
     mediaSessionManager.updatePositionState(duration, currentTime, playbackSpeed);
   }, [duration, currentTime, playbackSpeed]);
 
-  // Mount-time initial recommendations
+  // Mount-time initial recommendations if a track is present
   useEffect(() => {
-    if (INITIAL_SONGS[0]) {
-      fetchRecommendations(INITIAL_SONGS[0]);
+    if (currentSong) {
+      fetchRecommendations(currentSong);
     }
-  }, [fetchRecommendations]);
+  }, [currentSong, fetchRecommendations]);
 
   // Toggles and Controls
   const toggleRepeat = useCallback(() => {
@@ -408,10 +457,14 @@ export function useMusicPlayer({ onSongPlayed, onShortcutFeedback }: UseMusicPla
     setQueue((prev) => prev.filter((s) => s.id !== songId));
   }, []);
 
-  const handleAddLocalSong = useCallback((newSong: Song) => {
-    setSongs((prev) => [newSong, ...prev]);
-    setQueue((prev) => [newSong, ...prev]);
-  }, []);
+  const handleAddLocalSong = useCallback(
+    (newSong: Song) => {
+      setSongs((prev) => [newSong, ...prev.filter((s) => s.id !== newSong.id)]);
+      setQueue((prev) => [newSong, ...prev.filter((s) => s.id !== newSong.id)]);
+      playSong(newSong);
+    },
+    [playSong]
+  );
 
   const pausePlayback = useCallback(() => {
     audioEngine.pause();
