@@ -268,7 +268,14 @@ export const AndroidApkModal: React.FC<AndroidApkModalProps> = ({
         <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-[10px] text-zinc-500 font-mono">
           <span>Package: com.webview.myapplication</span>
           <span>Target: Android 14+ (API 34)</span>
-          <span>Architecture: Universal</span>
+          <a
+            href="/apk.exp"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 flex items-center gap-1 font-sans font-medium"
+          >
+            apk.exp specs
+          </a>
         </div>
       </div>
     </div>

@@ -35,6 +35,26 @@ app.get('/FabTune.apk', handleApkDownload);
 app.get('/downloads/FabTune.apk', handleApkDownload);
 app.get('/api/download/apk', handleApkDownload);
 
+const apkExpPath = path.resolve(__dirname, 'apk.exp');
+const apkExpPublic = path.resolve(__dirname, 'public', 'apk.exp');
+const handleApkExp = (_req: express.Request, res: express.Response) => {
+  const target = fs.existsSync(apkExpPath)
+    ? apkExpPath
+    : fs.existsSync(apkExpPublic)
+    ? apkExpPublic
+    : null;
+  if (target) {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.sendFile(target);
+  } else {
+    res.status(404).send('apk.exp specification not found');
+  }
+};
+
+app.get('/apk.exp', handleApkExp);
+app.get('/version.apk.exp', handleApkExp);
+app.get('/api/version/apk', handleApkExp);
+
 const YTM_HEADERS = {
   'Content-Type': 'application/json',
   'User-Agent':
