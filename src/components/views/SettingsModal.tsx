@@ -1,6 +1,6 @@
 import React from 'react';
 import { ColorTheme, ThemeBrightness } from '../../types/music';
-import { Palette, Sun, Moon, Shield, Volume2, X, Sparkles, Check, Keyboard, Smartphone, Download } from 'lucide-react';
+import { Palette, Sun, Moon, Shield, Volume2, X, Sparkles, Check, Keyboard } from 'lucide-react';
 import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 interface SettingsModalProps {
@@ -10,7 +10,6 @@ interface SettingsModalProps {
   onThemeBrightnessChange: (b: ThemeBrightness) => void;
   onClose: () => void;
   onResetData: () => void;
-  onOpenAndroidApk?: () => void;
 }
 
 const THEME_OPTIONS: { id: ColorTheme; label: string; hex: string }[] = [
@@ -29,7 +28,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onThemeBrightnessChange,
   onClose,
   onResetData,
-  onOpenAndroidApk,
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in select-none">
@@ -107,30 +105,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* Mobile APK & Offline App Installation */}
+        {/* App Installation */}
         <div className="space-y-3">
           <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-            Mobile &amp; Desktop App
+            Install App
           </label>
-          <div className="space-y-2">
-            <button
-              onClick={() => onOpenAndroidApk?.()}
-              className="w-full p-3 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl border border-emerald-500/30 flex items-center justify-between transition-colors text-left group cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                  <Smartphone className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-semibold flex items-center gap-1.5">
-                    <span>Download Android APK</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-mono">1.4 MB</span>
-                  </div>
-                  <div className="text-[11px] text-zinc-400">Direct package install with background &amp; lock-screen audio</div>
-                </div>
-              </div>
-              <Download className="w-4 h-4 text-emerald-400 shrink-0" />
-            </button>
+          <div>
             <PWAInstallButton variant="settings" />
           </div>
         </div>

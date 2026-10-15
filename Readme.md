@@ -50,7 +50,7 @@ An elegant, high-performance music streaming client and audio player engineered 
 
 ### 🔍 5. Music Discovery & Smart Exploration
 - **Curated Charts**: Global Top 50, Viral Hits, New Releases, and Mood Radio.
-- **Instant Search**: Real-time track, artist, album, and playlist querying.
+- **Press-Enter Instant Search**: Query YouTube Music and local tracks instantly by typing and pressing <kbd>Enter ↵</kbd>, with live suggestion keyboard navigation (↑/↓) and quick filter chips.
 - **Related Recommendations**: Dynamic queue suggestions based on current playback context.
 
 ### 📈 6. FabTune Wrapped Listening Analytics
@@ -173,24 +173,29 @@ curl http://localhost:3000/apk.exp
 ├── scripts/
 │   └── build-apk.py             # Android APK compilation, zipalign & apksigner script
 └── src/
-    ├── App.tsx                  # Main application orchestrator & view state
+    ├── App.tsx                  # Synthesized application orchestrator & layout
     ├── main.tsx                 # React DOM mount point
     ├── index.css                # Global styles and Tailwind v4 imports
-    ├── types.ts                 # TypeScript interfaces for music, lyrics, audio
+    ├── types/
+    │   └── music.ts             # TypeScript interfaces for music, lyrics, playlists, themes
+    ├── data/
+    │   └── musicData.ts         # Initial offline fallback tracks, presets and playlists
+    ├── hooks/
+    │   ├── useMusicPlayer.ts    # Synthesized audio playback, queue & recommendations
+    │   ├── useKeyboardShortcuts.ts # Global keybindings & HUD toast notifications
+    │   ├── useSleepTimer.ts     # Sleep timer countdown with auto-pause
+    │   ├── useOnlineStatus.ts   # Browser connectivity detection
+    │   └── usePWAInstall.ts     # PWA deferred install prompt lifecycle
     ├── components/
-    │   ├── player/              # Player controls, vinyl turntable & full-screen UI
-    │   ├── lyrics/              # Real-time auto-scrolling synchronized lyrics
-    │   ├── equalizer/           # 10-band graphic EQ and frequency spectrum visualizer
-    │   ├── explore/             # Browse charts, trending releases & genre radio
-    │   ├── playlist/            # Custom playlist creator and track manager
-    │   ├── search/              # Real-time music search bar and results view
-    │   ├── pwa/                 # Android APK download modal, QR generator & PWA prompt
-    │   ├── wrapped/             # Yearly Wrapped music statistics and visual cards
-    │   └── common/              # Toast notifications, modals, navigation bars
+    │   ├── common/              # Cover art display & keyboard shortcut HUD toasts
+    │   ├── navigation/          # HeaderNav top bar & MobileNavBar 4-column dock
+    │   ├── player/              # MiniPlayer, FullPlayerModal, Equalizer, Turntable
+    │   ├── pwa/                 # OfflineIndicator, PWAInstallButton
+    │   ├── views/               # HomeView, ExploreView, LibraryView, SearchView
+    │   └── wrapped/             # Yearly Wrapped music stats & interactive stories
     └── services/
-        ├── audioService.ts      # Web Audio API engine & equalizer DSP nodes
-        ├── musicApi.ts          # Music catalog search and metadata fetching
-        └── storageService.ts    # LocalStorage persistence for playlists & preferences
+        ├── audioEngine.ts       # Web Audio API engine & synthesizer DSP nodes
+        └── mediaSession.ts      # Native lockscreen & notification media controls
 ```
 
 ---
