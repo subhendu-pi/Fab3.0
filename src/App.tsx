@@ -21,6 +21,7 @@ import { WrappedModal } from './components/wrapped/WrappedModal';
 import { SettingsModal } from './components/views/SettingsModal';
 import { PWAInstallButton } from './components/pwa/PWAInstallButton';
 import { OfflineIndicator } from './components/pwa/OfflineIndicator';
+import { AndroidApkModal } from './components/pwa/AndroidApkModal';
 import { mediaSessionManager } from './services/mediaSession';
 import {
   Disc,
@@ -30,6 +31,7 @@ import {
   Sparkles,
   Settings,
   Sliders,
+  Smartphone,
 } from 'lucide-react';
 
 const STORAGE_KEY_LIKES = 'fabtune_liked_ids';
@@ -105,6 +107,7 @@ export default function App() {
   const [showFullPlayer, setShowFullPlayer] = useState<boolean>(false);
   const [showWrapped, setShowWrapped] = useState<boolean>(false);
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [showAndroidApkModal, setShowAndroidApkModal] = useState<boolean>(false);
 
   // Appearance & Themes
   const [colorTheme, setColorTheme] = useState<ColorTheme>(() => {
@@ -846,6 +849,16 @@ export default function App() {
 
         {/* Zone 3: Primary Action & Controls */}
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setShowAndroidApkModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25 text-xs font-semibold transition-all active:scale-95 cursor-pointer shadow-sm shadow-emerald-950/40"
+            title="Download FabTune Android APK"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden md:inline">Android APK</span>
+            <span className="md:hidden">APK</span>
+          </button>
+
           <PWAInstallButton variant="header" />
 
           <button
@@ -989,6 +1002,18 @@ export default function App() {
           <Search className="w-4 h-4" />
           <span className="text-[10px] mt-0.5 font-medium">Search</span>
         </button>
+
+        <button
+          onClick={() => {
+            triggerHaptic();
+            setShowAndroidApkModal(true);
+          }}
+          className="flex flex-col items-center justify-center py-1 transition-all active:scale-95 text-zinc-400 hover:text-emerald-300"
+          title="Download FabTune Android APK"
+        >
+          <Smartphone className="w-4 h-4 text-emerald-400" />
+          <span className="text-[10px] mt-0.5 font-medium text-emerald-400/90">Get APK</span>
+        </button>
       </nav>
 
       {/* Pinned Bottom MiniPlayer */}
@@ -1089,6 +1114,18 @@ export default function App() {
           onThemeBrightnessChange={setThemeBrightness}
           onClose={() => setShowSettings(false)}
           onResetData={handleResetData}
+          onOpenAndroidApk={() => {
+            setShowSettings(false);
+            setShowAndroidApkModal(true);
+          }}
+        />
+      )}
+
+      {/* Android APK Download Modal */}
+      {showAndroidApkModal && (
+        <AndroidApkModal
+          isOpen={showAndroidApkModal}
+          onClose={() => setShowAndroidApkModal(false)}
         />
       )}
     </div>

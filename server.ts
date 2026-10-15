@@ -1,6 +1,7 @@
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,6 +11,29 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+
+const apkPathPublic = path.resolve(__dirname, 'public', 'FabTune.apk');
+const apkPathDist = path.resolve(__dirname, 'dist', 'FabTune.apk');
+
+const handleApkDownload = (_req: express.Request, res: express.Response) => {
+  const targetPath = fs.existsSync(apkPathPublic)
+    ? apkPathPublic
+    : fs.existsSync(apkPathDist)
+    ? apkPathDist
+    : null;
+
+  if (targetPath) {
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', 'attachment; filename="FabTune.apk"');
+    res.sendFile(targetPath);
+  } else {
+    res.status(404).send('APK file is generating. Please retry in a moment.');
+  }
+};
+
+app.get('/FabTune.apk', handleApkDownload);
+app.get('/downloads/FabTune.apk', handleApkDownload);
+app.get('/api/download/apk', handleApkDownload);
 
 const YTM_HEADERS = {
   'Content-Type': 'application/json',
@@ -514,7 +538,7 @@ async function startServer() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: isHmrDisabled ? false : { server },
+        hmr: false,
       },
       appType: 'spa',
     });
